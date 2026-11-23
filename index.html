@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>1. Circles on spheres</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #040308; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  #msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+         color: #adb5bd; font: 14px system-ui; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg">WebGPU is not available in this browser.</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
