@@ -1,4 +1,5 @@
 import { buildLayout, buildRootGrid, hexToRgb } from './layout.js';
+import { Recorder } from './recorder.js';
 
 const OCEAN = [['#1f4e79', 3], ['#2e86ab', 3], ['#58b4c9', 2.5], ['#a8dadc', 2], ['#f1faee', 1.2], ['#0b2545', 1.5], ['#264653', 1.5], ['#e76f51', 1], ['#f4a261', 0.8]];
 const DUSK = [['#2b1b4a', 3], ['#4b2c7a', 3], ['#7a4fa3', 2], ['#b48ec9', 1.5], ['#e0c3fc', 0.6], ['#1b1333', 2], ['#3d5a80', 1.5], ['#16213e', 1.5], ['#c05299', 0.8]];
@@ -174,7 +175,8 @@ async function main() {
     s.grid = buildRootGrid(s.lay);
   }
   console.log(`[circles] layout ${(performance.now() - t0).toFixed(0)}ms`, specs.map((s) => `${s.name}=${s.lay.n}`).join(' '));
-  window.__circles = { counts: specs.map((s) => s.lay.n), frames: 0 };
+  const rec = new Recorder(canvas);
+  window.__circles = { counts: specs.map((s) => s.lay.n), frames: 0, rec };
 
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
@@ -304,7 +306,7 @@ async function main() {
       root = mul(rotAxis(spinAxis, spinVel * dt), root);
     }
     orthonormalize(root);
-    resize();
+    if (!rec.active) resize();
 
     const roots = {
       inner: root,
@@ -328,6 +330,7 @@ async function main() {
     for (const s of specs) { pass.setBindGroup(0, s.bind); pass.draw(3); }
     pass.end();
     device.queue.submit([enc.finish()]);
+    rec.onFrame(now);
     window.__circles.frames++;
     requestAnimationFrame(frame);
   }
