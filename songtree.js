@@ -106,31 +106,42 @@ function randomInCap(rand, c, R) {
 }
 const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
 
-// 親の球冠（中心 c、半径 R。根は球全体 R=π）に子を詰める
+// 親の球冠（中心 c、半径 R。根は球全体 R=π）に子を詰める。
+// 大きい順に置く。置ける候補をいくつか集め、そのうち「まわり（兄弟の縁か親の縁）に一番近い」点を選ぶ
+// （隙間を作らないように寄せて置く）。全部入らなければ全体を少し縮めてやり直す
 function packKids(rand, kids, c, R, fill, exp = EXP) {
   if (!kids.length) return;
   const w = kids.map((k) => Math.pow(k.dur, exp));
+  const whole = R >= Math.PI;
   const parentArea = 2 * Math.PI * (1 - Math.cos(R));
-  // 小さい角半径では球冠の面積 ≈ π th²。全体で親の面積の fill 割を目安に始める
+  // 小さい角半径では球冠の面積 ≈ π th²。全体で親の面積の fill 割から始める
   let s = Math.sqrt((fill * parentArea) / (Math.PI * w.reduce((a, x) => a + x * x, 0)));
+  if (kids.length === 1 && !whole) s = Math.min(s, (R - 2 * MARGIN) / w[0]);
   const order = kids.map((_, i) => i).sort((a, b) => w[b] - w[a]);
-  for (let attempt = 0; attempt < 200; attempt++, s *= 0.96) {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    if (attempt % 3 === 2) s *= 0.97; // 同じ大きさで 3 回まで試す
     const placed = [];
     let ok = true;
     for (const i of order) {
       const th = s * w[i];
-      const room = R >= Math.PI ? Math.PI : R - th - MARGIN;
+      const room = whole ? Math.PI : R - th - MARGIN;
       if (room < 0) { ok = false; break; }
-      let done = false;
-      for (let t = 0; t < 600; t++) {
-        const p = R >= Math.PI ? randomInCap(rand, [0, 0, 1], Math.PI) : randomInCap(rand, c, room);
-        if (placed.every((q) => ang(p, q.c) > th + q.th + MARGIN)) {
-          placed.push({ i, c: p, th });
-          done = true;
-          break;
+      let best = null, bestGap = Infinity, found = 0;
+      for (let t = 0; t < 600 && found < 24; t++) {
+        const p = whole ? randomInCap(rand, [0, 0, 1], Math.PI) : randomInCap(rand, c, room);
+        let gap = whole ? Math.PI : room - ang(p, c); // 親の縁までの余り
+        let fits = true;
+        for (const q of placed) {
+          const g = ang(p, q.c) - th - q.th - MARGIN;
+          if (g <= 0) { fits = false; break; }
+          if (g < gap) gap = g;
         }
+        if (!fits) continue;
+        found++;
+        if (gap < bestGap) { bestGap = gap; best = p; }
       }
-      if (!done) { ok = false; break; }
+      if (!best) { ok = false; break; }
+      placed.push({ i, c: best, th });
     }
     if (ok) {
       for (const q of placed) { kids[q.i].c = q.c; kids[q.i].th = q.th; }
@@ -140,7 +151,7 @@ function packKids(rand, kids, c, R, fill, exp = EXP) {
   throw new Error(`packKids failed: ${kids.length} kids in R=${R}`);
 }
 
-export function packTree(tree, { seed = 1, exp = EXP, scale = 1.4, fill = { song: 0.6, section: 0.55, bar: 0.5, beat: 0.45, cycle: 0.55, chord: 0.5, sub: 0.55 } } = {}) {
+export function packTree(tree, { seed = 1, exp = EXP, scale = 1.8, fill = { song: 0.6, section: 0.55, bar: 0.5, beat: 0.45, cycle: 0.55, chord: 0.5, sub: 0.55 } } = {}) {
   const rand = mulberry32(seed);
   const walk = (node, c, R) => {
     packKids(rand, node.kids, c, R, Math.min(0.9, (fill[node.kind] ?? 0.45) * scale), exp);
