@@ -146,6 +146,66 @@ export class Recorder {
     console.log(`[rec] start ${this.size.w}x${this.size.h} via ${this.mode}${this.codec ? ' ' + this.codec : ''}`);
   }
 
+  // 書き出し（オフライン）: 画面の時計ではなく、フレーム番号から t = slot / 60 を決めて1枚ずつ描く。
+  // 音（WAV）と後で ffmpeg で合わせるので、時刻がずれない。drawAt(t, dt) は描画を submit まで行う関数
+  async exportOffline(key, seconds, drawAt, name = 'export') {
+    if (this.active) return null;
+    this.size = SIZES.find((s) => s.key === key) || SIZES[0];
+    this.prevCss = this.canvas.getAttribute('style') || '';
+    this.canvas.width = this.size.w;
+    this.canvas.height = this.size.h;
+    this.layoutCanvas();
+    this.active = true;
+    this.status = 'exporting';
+    const config = await this.pickCodec(this.size.w, this.size.h);
+    if (!config) { this.restore(); throw new Error('VideoEncoder (H.264) が使えない'); }
+    const samples = [];
+    let description = null, error = null;
+    const enc = new VideoEncoder({
+      output: (chunk, meta) => {
+        if (meta?.decoderConfig?.description && !description) description = new Uint8Array(meta.decoderConfig.description.slice(0));
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        samples.push({ data, key: chunk.type === 'key', ts: chunk.timestamp });
+      },
+      error: (e) => { error = e; },
+    });
+    enc.configure(config);
+    const total = Math.round(seconds * FPS);
+    const t0 = performance.now();
+    for (let slot = 0; slot < total; slot++) {
+      drawAt(slot / FPS, 1 / FPS);
+      const frame = new VideoFrame(this.canvas, { timestamp: Math.round((slot * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
+      enc.encode(frame, { keyFrame: slot % (FPS * 2) === 0 });
+      frame.close();
+      if (error) break;
+      while (enc.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 0));
+      if (slot % 30 === 0) {
+        this.setHud(`EXPORT ${fmt(slot / FPS)} / ${fmt(seconds)}`);
+        this.progress = slot / total;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+    await enc.flush();
+    enc.close();
+    if (error) { this.restore(); throw error; }
+    samples.sort((a, b) => a.ts - b.ts);
+    const blob = muxMp4({ width: this.size.w, height: this.size.h, timescale: TIMESCALE, samples: samples.map((x) => ({ data: x.data, key: x.key, dur: TIMESCALE / FPS })), description });
+    this.stats = { frames: samples.length, keys: samples.filter((x) => x.key).length, codec: config.codec, sec: ((performance.now() - t0) / 1000).toFixed(1) };
+    this.lastBlob = blob;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name}-${this.size.key}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    console.log('[rec] exported', a.download, blob.size, JSON.stringify(this.stats));
+    this.setHud(`Saved ${(blob.size / 1e6).toFixed(1)} MB`, true);
+    this.status = 'saved';
+    this.restore();
+    return blob;
+  }
+
   startMediaRecorder() {
     this.mode = 'mediarecorder';
     const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];

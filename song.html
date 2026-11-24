@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nested clock</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #040308; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  #msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+         color: #adb5bd; font: 14px system-ui; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg">WebGPU is not available in this browser.</div>
+<div id="hint" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:none;font:13px system-ui;color:#adb5bd;letter-spacing:.08em;pointer-events:none">loading…</div>
+<script type="module" src="./song-main.js"></script>
+</body>
+</html>
